@@ -6,6 +6,12 @@
 import logging
 
 
+def report_wrap(report):
+    def wrap(message, *args, **kargs):
+        report(message.format(*args, **kargs))
+    return wrap
+
+
 MESSAGE_FORMAT ='[%(asctime)s] %(levelname)-8s : %(message)s'
 DATE_FORMAT = '%y.%m.%d %H:%M:%S'
 
@@ -15,7 +21,7 @@ ERROR = logging.ERROR
 DEBUG = logging.DEBUG
 
 
-debug = logging.debug
+debug = report_wrap(logging.debug)
 error = logging.error
 critical = logging.critical
 

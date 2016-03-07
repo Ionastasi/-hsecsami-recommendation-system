@@ -4,15 +4,18 @@
 
 
 from html.parser import HTMLParser
-import os
 import urllib.request
+import os
+from datetime import date
 
 
 import log
 
 
 DIR_HTML = '../data/html/'
-LINK_PREFIX = "http://geektimes.ru/post/"
+LINK_PREFIX_POST = "http://geektimes.ru/post/"
+LINK_PREFIX_ALL_PAGE = "http://geektimes.ru/all/page"
+HTMLS_INDEX = '../data/html/.index'
 KB_SIZE = 1024
 
 
@@ -29,7 +32,7 @@ class Parser_page_all(HTMLParser):  # posts from all-page
                 if 'post ' in attrs['class'] and 'shortcuts_item' in attrs['class']:
                 # 'post shortcuts_item', 'post translation shortcuts_item', may be smth else
                 # and it can't be 'posts shortcuts_item'
-                    self.posts.append(int(attrs['id'][5:]))  # post_271508 -> 271508
+                    self.posts.append(int(attrs['id'].replace('post_', '')))  # post_271508 -> 271508
 
 
     def parse(self, page):
@@ -38,14 +41,13 @@ class Parser_page_all(HTMLParser):  # posts from all-page
 
 
 def downloaded_html_files():
-    flist = set([int(x[:-5]) for x in os.listdir(DIR_HTML)])  # 271508.html -> 271508
+    # 271508.html -> 271508
+    flist = set(map(int, open(HTMLS_INDEX).readlines()))
     return flist
 
 
-
-def download(post_id):
+def download(url):
     try:
-        url = LINK_PREFIX + str(post_id)
         response = urllib.request.urlopen(url)
         log.debug('Load "{}"... {} {}'.format(url, response.reason, response.getcode()))
 
@@ -56,31 +58,35 @@ def download(post_id):
             log.error('Load "{}"... {} {}'.format(url, exception.reason, exception.code))
 
     else:
-        if response.getcode() == 200:
-            path = '{}{}.html'.format(DIR_HTML, post_id)
-            text = response.read().decode('utf-8')
-            with open(path, 'w') as fout:
-                fout.write(text)
-            log.debug('Store {} to {}... {} KB'.format(url, path, round(os.path.getsize(path) // KB_SIZE)))
+        return response
 
 
-def download_100():
-    files = downloaded_html_files()
-    files2 = list(files)
-    files2.sort(reverse=True)
-    for p in range(100):
-        url = 'http://geektimes.ru/all/page{}/'.format(p + 1)
-        response = urllib.request.urlopen(url)
-        log.debug('Load "{}"... {} {}'.format(url, response.reason, response.getcode()))
+def download_post(url):
+    response = download(url)
+    id_page = url.replace(LINK_PREFIX_POST, '')
+    path = '{}.html'.format(DIR_HTML + id_page)
+    text = response.read().decode('utf-8')
+    today = date.today().strftime('%y.%m.%d')  # i should know it when parsing page
+    with open(path, 'w') as fout:
+        fout.write("<!-- when_downloaded {} -->\n{}".format(today, text))
+    with open(HTMLS_INDEX, 'a') as fout:
+        fout.write('{}\n'.format(id_page))
+    log.debug('Store {} to {}... {} KB'.format(url, path, round(os.path.getsize(path) // KB_SIZE)))
+
+
+def download_last():
+    htmls = downloaded_html_files()
+    for p in range(1, 101):
+        url = '{}{}/'.format(LINK_PREFIX_ALL_PAGE, p)
+        response = download(url)
         text = response.read().decode('utf-8')
-        posts_to_check = Parser_page_all().parse(text)
-        for post in posts_to_check:
-            if post not in files:
-                download(post)
+        for post in Parser_page_all().parse(text):
+            if post not in htmls:
+                download_post('{}{}'.format(LINK_PREFIX_POST, post))
 
 
 def download_range(first, last):
-    html_files = downloaded_html_files()
+    htmls = downloaded_html_files()
     for post in range(first, last + 1):
-        if post not in html_files:
-            download(post)
+        if post not in htmls:
+            download_post('{}{}'.format(LINK_PREFIX_POST, post))
