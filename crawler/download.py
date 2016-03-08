@@ -42,15 +42,15 @@ class Parser_page_all(HTMLParser):  # posts from all-page
         return self.posts
 
 
-def download(url):
+def download(url, bad_NotFound=False):
     try:
         response = urllib.request.urlopen(url)
         log.debug('Load "{}"... {} {}'.format(url, response.reason, response.getcode()))
 
     except (urllib.error.URLError, urllib.error.HTTPError) as exception:
-        if exception.code == 404:  # debug
+        if exception.code == 404 and not bad_NotFound:
             log.debug('Load "{}"... {} {}'.format(url, exception.reason, exception.code))
-        else:                      # error
+        else:
             log.error('Load "{}"... {} {}'.format(url, exception.reason, exception.code))
 
     else:
@@ -74,7 +74,7 @@ def download_last(print_ids=False, force=False):
     signal.signal(signal.SIGINT, signal_handler)  # catching KeyboardInterrupt
     for p in range(1, 101):
         url = LINK_PREFIX_ALL_PAGE + str(p)
-        response = download(url)
+        response = download(url, bad_NotFound=True)
         text = response.read().decode('utf-8')
         for post in Parser_page_all().parse(text):
             if force or post not in htmls:
