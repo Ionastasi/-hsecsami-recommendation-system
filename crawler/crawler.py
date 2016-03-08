@@ -11,18 +11,16 @@ import download
 import clean
 
 
-DIR_HTML = '../data/html/'
 HTMLS_INDEX = '../data/html/.index'
 
 
 def parse_argument(argv):
     parser = argparse.ArgumentParser(
         prog='crawler',
-        description='''Download and cleaning pages from geektimes.ru
-                       and a few from habrahabr.ru and megamozg.ru
-                       because of reforwarding.'''
+        description='''Download and clean posts from geektimes.ru.
+                       Because of reforwarding, a few posts from
+                       habrababr.ru and megamozg.ru too.'''
     )
-
     parser.add_argument(
         '--log',
         default='error',
@@ -30,6 +28,7 @@ def parse_argument(argv):
         dest='log_level',
         help="changing log level, 'error' for default"
     )
+
     subparsers = parser.add_subparsers(
         dest='parser_mode'
     )
@@ -42,7 +41,7 @@ def parse_argument(argv):
     update.add_argument(
         '--print-ids',
         action='store_true',
-        dest='update_print_ids',
+        dest='print_ids',
         help='set this if you want ids printed out'
     )
     update_subs = update.add_subparsers(
@@ -88,7 +87,7 @@ def parse_argument(argv):
     clean_all = clean_subs.add_parser(
         'all',
         help='parse all htmls',
-        description="Clean all htmls from tags and etc, that wasn't  cleaned earlier."
+        description="Clean all htmls from tags and etc, if they weren't cleaned earlier."
     )
     clean_range = clean_subs.add_parser(
         'range',
@@ -137,11 +136,11 @@ def parse_argument(argv):
     )
 
     if 'update' in sys.argv:
-        if 'last' not in sys.argv and 'range' not in sys.argv:
+        if 'range' not in sys.argv and 'last' not in sys.argv:
             update.print_help()
             sys.exit(1)
     elif 'clean' in sys.argv:
-        if 'all' not in sys.argv and 'range' not in sys.argv:
+        if 'range' not in sys.argv and 'all' not in sys.argv and 'list' not in sys.argv:
             clean.print_help()
             sys.exit(1)
     else:
@@ -158,19 +157,25 @@ def main():
 
     if args.parser_mode == 'update':
         if args.update_mode == 'last':
-            download.download_last()
+            download.download_last(args.print_ids, args.update_force)
         if args.update_mode == 'range':
             download.download_range(min(args.start_down, args.end_down),
-                                    max(args.start_down, args.end_down))
+                                    max(args.start_down, args.end_down),
+                                    args.print_ids, args.update_force)
 
     if args.parser_mode == 'clean':
+        if args.clean_mode == 'list':
+            ids = list(map(int, open(args.clean_file).readlines()))
         if args.clean_mode == 'all':
-            htmls = list(map(int, open(HTMLS_INDEX).readlines()))  # 1234.html -> 1234
-            if htmls:
-                clean.clean_range(min(htmls), max(htmls))
+            htmls = list(map(int, open(HTMLS_INDEX).readlines()))
+            if not htmls:
+                exit()
+            ids = [x for x in range(min(htmls), max(htmls) + 1)]
         if args.clean_mode == 'range':
-            clean.clean_range(min(args.start_clean, args.end_clean),
-                              max(args.start_clean, args.end_clean))
+            first = min(args.start_clean, args.end_clean)
+            last = max(args.start_clean, args.end_clean)
+            ids = [x for x in range(first, last + 1)]
+        clean.clean_list(ids, args.clean_force)
 
 if __name__ == '__main__':
     main()

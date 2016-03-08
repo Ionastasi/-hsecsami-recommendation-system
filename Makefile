@@ -3,7 +3,7 @@ NAME = crawler/crawler.py
 all: prepare
 
 prepare:
-	mkdir -p data/html/.inde
+	mkdir -p data/html
 	mkdir -p data/text
 	touch data/html/.index
 	touch data/text/.index
