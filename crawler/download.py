@@ -24,7 +24,7 @@ htmls = set(map(int, open(HTMLS_INDEX).readlines()))
 class Parser_page_all(HTMLParser):  # posts from all-page
     def __init__(self):
         HTMLParser.__init__(self)
-        self.posts = list()
+        self._posts = list()
 
 
     def handle_starttag(self, tag, attrs):
@@ -34,12 +34,12 @@ class Parser_page_all(HTMLParser):  # posts from all-page
                 if 'post ' in attrs['class'] and 'shortcuts_item' in attrs['class']:
                 # 'post shortcuts_item', 'post translation shortcuts_item', may be smth else
                 # and it can't be 'posts shortcuts_item'
-                    self.posts.append(int(attrs['id'].replace('post_', '')))  # post_271508 -> 271508
+                    self._posts.append(int(attrs['id'].replace('post_', '')))  # post_271508 -> 271508
 
 
     def parse(self, page):
         self.feed(page)
-        return self.posts
+        return self._posts
 
 
 def download(url, bad_NotFound=False):
