@@ -22,8 +22,8 @@ DEBUG = logging.DEBUG
 
 
 debug = report_wrap(logging.debug)
-error = logging.error
-critical = logging.critical
+error = report_wrap(logging.error)
+critical = report_wrap(logging.critical)
 
 
 def level(level_name):
