@@ -5,7 +5,7 @@
 
 from html.parser import HTMLParser
 from urllib.request import urlopen
-from datetime import date, timedelta
+from datetime import datetime, date, timedelta
 from collections import namedtuple
 import os
 from io import StringIO
@@ -15,70 +15,68 @@ import log
 
 
 KB_SIZE = 1024
-DIR_HTML = '../data/html/'
-DIR_TEXT = '../data/text/'
-TEXTS_INDEX = '../data/text/.index'
-HTMLS_INDEX = '../data/html/.index'
-Result = namedtuple('Result', ['date', 'keywords', 'title', 'article_text'])
-MONTHS = {
-        'января': '01',
-        'февраля': '02',
-        'марта': '03',
-        'апреля': '04',
-        'мая': '05',
-        'июня': '06',
-        'июля': '07',
-        'августа': '08',
-        'сентября': '09',
-        'октября': '10',
-        'ноября': '11',
-        'декабря': '12'
+HTML_DIR = '../data/html/'
+TEXT_DIR = '../data/text/'
+TEXTS_INDEX = TEXT_DIR + '.index'
+HTMLS_INDEX = HTML_DIR + '.index'
+ArticleData = namedtuple('ArticleData', ['date', 'keywords', 'title', 'article_text'])
+RU_MONTH_TO_NUM = {
+        'января': 1,
+        'февраля': 2,
+        'марта': 3,
+        'апреля': 4,
+        'мая': 5,
+        'июня': 6,
+        'июля': 7,
+        'августа': 8,
+        'сентября': 9,
+        'октября': 10,
+        'ноября': 11,
+        'декабря': 12
         }
 
-htmls = set(map(int, open(HTMLS_INDEX).readlines()))
 texts = set(map(int, open(TEXTS_INDEX).readlines()))
 
 
-class Parser(HTMLParser):
+def parse_str_date(today, day_to_parse):
+    # Possible date formats:
+    # сегодня в 12:00
+    # вчера в 12:00
+    # 1 января в 12:00
+    # 1 января 2014 в 12:00
+    day_to_parse = list(day_to_parse.split())
+    date_prefix, time = day_to_parse[:-1], day_to_parse[-1]
+    hour, minute = map(int, time.split(':'))
+    if date_prefix[0] == "сегодня":
+        year, month, day = today
+    elif date_prefix[0] == "вчера":
+        year, month, day = today - timedelta(1)
+    else:
+        day = int(date_prefix[0])
+        month = RU_MONTH_TO_NUM[date_prefix[1]]  # января -> 1
+        if date_prefix[2] != 'в':
+            year = int(date_prefix[2])
+        else:
+            year = today.year
+    result = datetime(year, month, day, hour, minute)
+    return result
+
+
+class ArticleParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
         self._in_published_tag = False
-        self._in_h1_tag = False
         self._in_span_tag = False
         self._in_text = False
         self._in_polling = False
         self._in_poll_title = False
         self._in_label = False
-        self._today = date.today()
 
+        self._today = datetime.now()
         self._article_text = StringIO()
         self._keywords = list()
         self._title = str()
         self._date_published = str()
-
-
-    def when_published(self, string_date):
-        # сегодня в 12:00
-        # вчера в 12:00
-        # 1 января в 12:00
-        # 1 января 2014 в 12:00
-        string_date = string_date.split()
-        hours = string_date[-1].split(':')[0]  # 12
-        minute = string_date[-1].split(':')[1]  # 00
-        if string_date[0] == "сегодня":
-            publ_date = self._today.isoformat()
-        elif string_date[0] == "вчера":
-            publ_date = (self._today - timedelta(1)).isoformat()
-        else:
-            day = string_date[0]
-            mon = MONTHS[string_date[1]]  # января -> 01
-            if string_date[2] != 'в':
-                year = string_date
-            else:
-                year = self._today.year
-            publ_date = '{}-{}-{}'.format(year, mon, day)
-        publ_date = '{}-{}-{}'.format(publ_date, hours, minute)
-        return publ_date
 
 
     # we wrote in the comment the day when we downloaded page
@@ -86,7 +84,7 @@ class Parser(HTMLParser):
     def handle_comment(self, data):
         # <!-- when_downloaded 2016-01-01 -->
         data = data.split()
-        if data[0] == "when_published":
+        if data[0] == "when_downloaded":
             data = list(map(int, data[1].split('-')))
             self._today = date(data[0], data[1], data[2])
 
@@ -117,10 +115,7 @@ class Parser(HTMLParser):
             self._in_label = True
 
         # article title
-        if tag == 'h1':
-            if attrs.get('class') == 'title':
-                self._in_h1_tag = True
-        if tag == 'span' and self._in_h1_tag:
+        if tag == 'span' and attrs.get('class') == "post_title":
             self._in_span_tag = True
 
 
@@ -138,7 +133,6 @@ class Parser(HTMLParser):
 
         if tag == 'span' and self._in_span_tag:  # article title
             self._in_span_tag = False
-            self._in_h1_tag = False
 
         if tag == 'br' and self._in_text:  # break-lines for more readable
             self._article_text.write('\n')
@@ -146,7 +140,7 @@ class Parser(HTMLParser):
 
     def handle_data(self, data):
         if self._in_published_tag:
-            self._date_published = self.when_published(data.strip())
+            self._date_published = parse_str_date(self._today, data.strip())
 
         if self._in_span_tag:
             self._title = data.strip()
@@ -163,30 +157,35 @@ class Parser(HTMLParser):
 
     def parse(self, page):
         self.feed(page)
-        return Result(self._date_published, self._keywords,
+        return ArticleData(self._date_published, self._keywords,
                       self._title, self._article_text.getvalue())
 
 
-
-def get_data_from_html(post):
-    path = '{}.html'.format(DIR_HTML + str(post))
+def parse_html(post):
+    path = '{}.html'.format(HTML_DIR + str(post))
     with open(path, encoding='utf-8') as html:
         page = html.read()
-    return Parser().parse(page)
+    return ArticleParser().parse(page)
 
 
 def clean_list(ids_list, force=False):
     signal.signal(signal.SIGINT, signal_handler)  # catching KeyboardInterrupt
+
+    htmls = set(map(int, open(HTMLS_INDEX).readlines()))
     for post in ids_list:
-        if post not in htmls or (not force and post in texts):
+        if post not in htmls:
+            log.debug("Can't parse post {}. File doesn't exist.".format(post))
             continue
-        data = get_data_from_html(post)
+        if not force and post in texts:
+            log.debug("Skip post {}. It's already processed.".format(post))
+            continue
+        data = parse_html(post)
         log.debug('Parse post {}.'.format(post))
-        path = '{}.txt'.format(DIR_TEXT + str(post))
+        path = '{}.txt'.format(TEXT_DIR + str(post))
         with open(path, 'w') as fout:
             # two break-lines for more readable
-            fout.write('{}\n\n{}\n\n{}\n\n{}'.format(data.date, ' '.join(data.keywords),
-                                                     data.title, data.article_text))
+            fout.write('\n\n'.join((data.date.isoformat(sep=' '), ' '.join(data.keywords),
+                                    data.title, data.article_text)))
         log.debug('Store {} to {}... {} KB'.format(post, path, round(os.path.getsize(path) // KB_SIZE)))
         texts.add(post)
     ending()
@@ -198,5 +197,6 @@ def ending():
 
 
 def signal_handler(signal, frame):
+    log.debug("KeyboardInterrupt.")
     ending()
     exit()
