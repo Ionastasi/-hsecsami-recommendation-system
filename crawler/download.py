@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 # ionastasi@gmail.com
 
+'''
+вынести htmls в main (когда он появится)
+'''
 
 from html.parser import HTMLParser
 import urllib.request
@@ -10,18 +13,16 @@ from datetime import date
 import signal
 
 import log
+from config import *
 
 
-KB_SIZE = 1024
-DIR_HTML = '../data/html/'
-HTMLS_INDEX = '../data/html/.index'
 LINK_PREFIX_POST = "http://geektimes.ru/post/"
 LINK_PREFIX_ALL_PAGE = "http://geektimes.ru/all/page"
 
 htmls = set(map(int, open(HTMLS_INDEX).readlines()))
 
 
-class Parser_page_all(HTMLParser):  # posts from all-page
+class ParserPageAll(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
         self._posts = list()
@@ -54,16 +55,15 @@ def download(url, bad_NotFound=False):
             log.error('Load "{}"... {} {}'.format(url, exception.reason, exception.code))
 
     else:
-        return response
+        return response.read().decode('utf-8')
 
 
 def download_post(url):
-    response = download(url)
-    if not response:
+    text = download(url)
+    if not text:
         return
     id_page = url.replace(LINK_PREFIX_POST, '')
     path = '{}.html'.format(DIR_HTML + id_page)
-    text = response.read().decode('utf-8')
     today = date.today().isoformat()  # i should know it when parsing page
     with open(path, 'w') as fout:
         fout.write("<!-- when_downloaded {} -->\n{}".format(today, text))
@@ -72,26 +72,26 @@ def download_post(url):
 
 def download_last(print_ids=False, force=False):
     signal.signal(signal.SIGINT, signal_handler)  # catching KeyboardInterrupt
-    for p in range(1, 101):
-        url = LINK_PREFIX_ALL_PAGE + str(p)
-        response = download(url, bad_NotFound=True)
-        text = response.read().decode('utf-8')
-        for post in Parser_page_all().parse(text):
-            if force or post not in htmls:
-                download_post(LINK_PREFIX_POST + str(post))
-                htmls.add(post)
+    for page_n in range(1, 101):
+        url = LINK_PREFIX_ALL_PAGE + str(page_n)
+        text = download(url, bad_NotFound=True)
+        for post_id in ParserPageAll().parse(text):
+            if force or post_id not in htmls:
+                download_post(LINK_PREFIX_POST + str(post_id))
+                htmls.add(post_id)
                 if print_ids:
-                    print(post)
+                    print(post_id)
     ending()
 
 def download_range(first, last, print_ids=False, force=False):
     signal.signal(signal.SIGINT, signal_handler)  # catching KeyboardInterrupt
-    for post in range(first, last + 1):
-        if force or post not in htmls:
-            download_post(LINK_PREFIX_POST + str(post))
-            htmls.add(post)
+    first, last = min(first, last), max(first, last)
+    for post_id in range(first, last + 1):
+        if force or post_id not in htmls:
+            download_post(LINK_PREFIX_POST + str(post_id))
+            htmls.add(post_id)
             if print_ids:
-                print(post)
+                print(post_id)
     ending()
 
 
