@@ -12,13 +12,9 @@ from io import StringIO
 import signal
 
 import log
+from config import *
 
 
-KB_SIZE = 1024
-HTML_DIR = '../data/html/'
-TEXT_DIR = '../data/text/'
-TEXTS_INDEX = TEXT_DIR + '.index'
-HTMLS_INDEX = HTML_DIR + '.index'
 ArticleData = namedtuple('ArticleData', ['date', 'keywords', 'title', 'article_text'])
 RU_MONTH_TO_NUM = {
         'января': 1,
@@ -48,9 +44,10 @@ def parse_str_date(today, day_to_parse):
     date_prefix, time = day_to_parse[:-1], day_to_parse[-1]
     hour, minute = map(int, time.split(':'))
     if date_prefix[0] == "сегодня":
-        year, month, day = today
+        year, month, day = today.year, today.month, today.day
     elif date_prefix[0] == "вчера":
-        year, month, day = today - timedelta(1)
+        d = today - timedelta(1)
+        year, month, day = d.year, d.month. d.day
     else:
         day = int(date_prefix[0])
         month = RU_MONTH_TO_NUM[date_prefix[1]]  # января -> 1
