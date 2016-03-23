@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 # ionastasi@gmail.com
 
+'''
+texts создавать в main и передавать функциям, где оно нужно
+(видимо, уже после того, как я разнесу argparse)
+'''
 
 from html.parser import HTMLParser
 from urllib.request import urlopen
@@ -40,8 +44,7 @@ def parse_str_date(today, day_to_parse):
     # вчера в 12:00
     # 1 января в 12:00
     # 1 января 2014 в 12:00
-    day_to_parse = list(day_to_parse.split())
-    date_prefix, time = day_to_parse[:-1], day_to_parse[-1]
+    *date_prefix, time = day_to_parse.split()
     hour, minute = map(int, time.split(':'))
     if date_prefix[0] == "сегодня":
         year, month, day = today.year, today.month, today.day

@@ -11,10 +11,6 @@ import download
 import clean
 from config import *
 
-'''
-Вводить имя файла в clean list без ключа --file, а сразу
-'''
-
 
 def parse_argument(argv):
     parser = argparse.ArgumentParser(
