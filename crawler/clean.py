@@ -2,18 +2,15 @@
 # -*- coding: utf-8 -*-
 # ionastasi@gmail.com
 
-'''
-texts создавать в main и передавать функциям, где оно нужно
-(видимо, уже после того, как я разнесу argparse)
-'''
 
+import argparse
+import sys
 from html.parser import HTMLParser
 from urllib.request import urlopen
 from datetime import datetime, date, timedelta
 from collections import namedtuple
 import os
 from io import StringIO
-import signal
 
 import log
 from config import *
@@ -35,35 +32,9 @@ RU_MONTH_TO_NUM = {
         'декабря': 12
         }
 
-texts = set(map(int, open(TEXTS_INDEX).readlines()))
-
-
-def parse_str_date(today, day_to_parse):
-    # Possible date formats:
-    # сегодня в 12:00
-    # вчера в 12:00
-    # 1 января в 12:00
-    # 1 января 2014 в 12:00
-    *date_prefix, time = day_to_parse.split()
-    hour, minute = map(int, time.split(':'))
-    if date_prefix[0] == "сегодня":
-        year, month, day = today.year, today.month, today.day
-    elif date_prefix[0] == "вчера":
-        d = today - timedelta(1)
-        year, month, day = d.year, d.month. d.day
-    else:
-        day = int(date_prefix[0])
-        month = RU_MONTH_TO_NUM[date_prefix[1]]  # января -> 1
-        if date_prefix[2] != 'в':
-            year = int(date_prefix[2])
-        else:
-            year = today.year
-    result = datetime(year, month, day, hour, minute)
-    return result
-
 
 class ArticleParser(HTMLParser):
-    def __init__(self):
+    def __init__(self, date):
         HTMLParser.__init__(self)
         self._in_published_tag = False
         self._in_span_tag = False
@@ -72,21 +43,11 @@ class ArticleParser(HTMLParser):
         self._in_poll_title = False
         self._in_label = False
 
-        self._today = datetime.now()
+        self._date_downloaded = date
         self._article_text = StringIO()
         self._keywords = list()
         self._title = str()
         self._date_published = str()
-
-
-    # we wrote in the comment the day when we downloaded page
-    # so we can work out what "сегодня" or "вчера" is
-    def handle_comment(self, data):
-        # <!-- when_downloaded 2016-01-01 -->
-        data = data.split()
-        if data[0] == "when_downloaded":
-            data = list(map(int, data[1].split('-')))
-            self._today = date(data[0], data[1], data[2])
 
 
     def handle_starttag(self, tag, attrs):
@@ -97,7 +58,7 @@ class ArticleParser(HTMLParser):
                 self._keywords = attrs['content'].split()
 
         if tag == 'div':
-            div_class =  attrs.get('class')
+            div_class = attrs.get('class')
             if div_class == 'published':
                 self._in_published_tag = True
             if div_class == 'content html_format':
@@ -140,7 +101,7 @@ class ArticleParser(HTMLParser):
 
     def handle_data(self, data):
         if self._in_published_tag:
-            self._date_published = parse_str_date(self._today, data.strip())
+            self._date_published = parse_str_date(self._date_downloaded, data.strip())
 
         if self._in_span_tag:
             self._title = data.strip()
@@ -158,45 +119,156 @@ class ArticleParser(HTMLParser):
     def parse(self, page):
         self.feed(page)
         return ArticleData(self._date_published, self._keywords,
-                      self._title, self._article_text.getvalue())
+                           self._title, self._article_text.getvalue())
 
 
-def parse_html(post):
+def parse_argument():
+    clean = argparse.ArgumentParser(
+        prog='clean',
+        description='''Extract text of articles and meta information.
+                       You can clean all pages, or some range of them, or some list.'''
+    )
+    clean.add_argument(
+        '--log',
+        default='error',
+        choices=['critical', 'error',  'debug'],
+        dest='log_level',
+        help="log level, 'error' is default value"
+    )
+    clean.add_argument(
+        '--force',
+        action='store_true',
+        dest='clean_force',
+        help='clean pages even if they were cleaned earlier'
+    )
+    clean_subs = clean.add_subparsers(
+        dest='clean_mode'
+    )
+    clean_all = clean_subs.add_parser(
+        'all',
+        help='parse all htmls',
+        description="Process articles, it they have been cleaned before."
+    )
+    clean_range = clean_subs.add_parser(
+        'range',
+        help='clean range of htmls',
+        description='''Clean range of htmls., skipping already cleaned htmls.
+                       Of course you should set the range by --from and --to.'''
+    )
+    clean_range.add_argument(
+        '--from',
+        type=int,
+        required=True,
+        dest='start_clean',
+        help='where range of cleaning starts'
+    )
+    clean_range.add_argument(
+        '--to',
+        type=int,
+        required=True,
+        dest='end_clean',
+        help='where range of cleaning ends'
+    )
+    clean_list = clean_subs.add_parser(
+        'list',
+        help='clean listed articles with listed ids',
+        description='''Clean htmls from some list you give with --file key.'''
+    )
+    clean_list.add_argument(
+        dest='clean_file',
+        metavar='file',
+        type=str,
+        help='cleaning posts from list in this file')
+
+
+    if 'range' not in sys.argv and 'all' not in sys.argv and 'list' not in sys.argv:
+        clean.print_help()
+        return
+
+    return clean.parse_args()
+
+
+def parse_str_date(date, day_to_parse):
+    # Possible date formats:
+    # сегодня в 12:00
+    # вчера в 12:00
+    # 1 января в 12:00
+    # 1 января 2014 в 12:00
+    *date_prefix, time = day_to_parse.split()
+    hour, minute = map(int, time.split(':'))
+    if date_prefix[0] == "сегодня":
+        year, month, day = date.year, date.month, date.day
+    elif date_prefix[0] == "вчера":
+        d = date - timedelta(day=1)
+        year, month, day = d.year, d.month. d.day
+    else:
+        day = int(date_prefix[0])
+        month = RU_MONTH_TO_NUM[date_prefix[1]]  # января -> 1
+        if date_prefix[2] != 'в':
+            year = int(date_prefix[2])
+        else:
+            year = date.year
+    result = datetime(year, month, day, hour, minute)
+    return result
+
+
+def parse_html(post, date):
     path = '{}.html'.format(HTML_DIR + str(post))
-    with open(path, encoding='utf-8') as html:
-        page = html.read()
-    return ArticleParser().parse(page)
+    page = open(path, encoding='utf-8').read()
+    return ArticleParser(date).parse(page)
 
 
-def clean_list(ids_list, force=False):
-    signal.signal(signal.SIGINT, signal_handler)  # catching KeyboardInterrupt
-
-    htmls = set(map(int, open(HTMLS_INDEX).readlines()))
-    for post in ids_list:
-        if post not in htmls:
-            log.debug("Can't parse post {}. File doesn't exist.".format(post))
-            continue
-        if not force and post in texts:
-            log.debug("Skip post {}. It's already processed.".format(post))
-            continue
-        data = parse_html(post)
-        log.debug('Parse post {}.'.format(post))
-        path = '{}.txt'.format(TEXT_DIR + str(post))
-        with open(path, 'w') as fout:
+def clean_list(ids_list, texts, post_to_date, force=False):
+    try:
+        for post in ids_list:
+            if post not in post_to_date:
+                log.debug("Can't parse post {}. File doesn't exist.".format(post))
+                continue
+            if not force and post in texts:
+                log.debug("Skip post {}. It's already processed.".format(post))
+                continue
+            data = parse_html(post, post_to_date[post])
+            log.debug('Parse post {}.'.format(post))
+            path = '{}.txt'.format(TEXT_DIR + str(post))
             # two break-lines for more readable
-            fout.write('\n\n'.join((data.date.isoformat(sep=' '), ' '.join(data.keywords),
-                                    data.title, data.article_text)))
-        log.debug('Store {} to {}... {} KB'.format(post, path, round(os.path.getsize(path) // KB_SIZE)))
-        texts.add(post)
-    ending()
+            open(path, 'w').write('\n\n'.join((data.date.isoformat(sep=' '), ' '.join(data.keywords),
+                                              data.title, data.article_text)))
+            log.debug('Store {} to {}... {} KB'.format(post, path,
+                                                       round(os.path.getsize(path) // KB_SIZE)))
+            texts.add(post)
+    except KeyboardInterrupt:
+        log.debug("KeyboardInterrupt.")
+    except Exception as exc:
+        exception, value, traceback = sys.exc_info()
+        log.critical('{}'.format(value))  # it doesn't work without formatting
+    finally:
+        open(TEXTS_INDEX, 'w').write('\n'.join(map(str, texts)))
 
 
-def ending():
-    with open(TEXTS_INDEX, 'w') as fout:
-        fout.write('\n'.join(map(str, texts)))
+def main():
+    texts = set(map(int, open(TEXTS_INDEX).readlines()))
+    post_to_date = dict()
+    for x in open(HTMLS_INDEX).readlines():
+        post, date = x.split()
+        post_to_date[int(post)] = datetime.strptime(date, DATE_FORMAT)
+    if not post_to_date:
+        return
+
+    args = parse_argument()
+    if not args:
+        return
+
+    log.config(log.level(args.log_level))
+
+    if args.clean_mode == 'list':
+        ids = list(map(int, open(args.clean_file).readlines()))
+    elif args.clean_mode == 'all':
+        ids = post_to_date.keys()
+    elif args.clean_mode == 'range':
+        ids = [x for x in range(args.start_clean, args.end_clean + 1)]
+
+    clean_list(ids, texts, post_to_date, args.clean_force)
 
 
-def signal_handler(signal, frame):
-    log.debug("KeyboardInterrupt.")
-    ending()
-    exit()
+if __name__ == '__main__':
+    main()
