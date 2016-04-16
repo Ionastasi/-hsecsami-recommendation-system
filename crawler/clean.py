@@ -14,23 +14,24 @@ from io import StringIO
 
 import log
 from config import *
-
+from utils import *
 
 ArticleData = namedtuple('ArticleData', ['date', 'keywords', 'title', 'article_text'])
+
 RU_MONTH_TO_NUM = {
-        'января': 1,
-        'февраля': 2,
-        'марта': 3,
-        'апреля': 4,
-        'мая': 5,
-        'июня': 6,
-        'июля': 7,
-        'августа': 8,
-        'сентября': 9,
-        'октября': 10,
-        'ноября': 11,
-        'декабря': 12
-        }
+    'января': 1,
+    'февраля': 2,
+    'марта': 3,
+    'апреля': 4,
+    'мая': 5,
+    'июня': 6,
+    'июля': 7,
+    'августа': 8,
+    'сентября': 9,
+    'октября': 10,
+    'ноября': 11,
+    'декабря': 12
+}
 
 
 class ArticleParser(HTMLParser):
@@ -118,15 +119,19 @@ class ArticleParser(HTMLParser):
 
     def parse(self, page):
         self.feed(page)
-        return ArticleData(self._date_published, self._keywords,
-                           self._title, self._article_text.getvalue())
+        return ArticleData(
+            self._date_published,
+            self._keywords,
+            self._title,
+            self._article_text.getvalue()
+        )
 
 
 def parse_argument():
     clean = argparse.ArgumentParser(
         prog='clean',
         description='''Extract text of articles and meta information.
-                       You can clean all pages, or some range of them, or some list.'''
+                       You can clean all pages, some range of them, or some list.'''
     )
     clean.add_argument(
         '--log',
@@ -147,12 +152,12 @@ def parse_argument():
     clean_all = clean_subs.add_parser(
         'all',
         help='parse all htmls',
-        description="Process articles, it they have been cleaned before."
+        description="Process articles, if they have not been cleaned before."
     )
     clean_range = clean_subs.add_parser(
         'range',
         help='clean range of htmls',
-        description='''Clean range of htmls., skipping already cleaned htmls.
+        description='''Clean range of htmls, skipping already cleaned htmls.
                        Of course you should set the range by --from and --to.'''
     )
     clean_range.add_argument(
@@ -199,8 +204,8 @@ def parse_str_date(date, day_to_parse):
     if date_prefix[0] == "сегодня":
         year, month, day = date.year, date.month, date.day
     elif date_prefix[0] == "вчера":
-        d = date - timedelta(day=1)
-        year, month, day = d.year, d.month. d.day
+        d = date - timedelta(1)
+        year, month, day = d.year, d.month, d.day
     else:
         day = int(date_prefix[0])
         month = RU_MONTH_TO_NUM[date_prefix[1]]  # января -> 1
@@ -212,45 +217,46 @@ def parse_str_date(date, day_to_parse):
     return result
 
 
-def parse_html(post, date):
+def parse_html(post, load_date):
     path = '{}.html'.format(HTML_DIR + str(post))
-    page = open(path, encoding='utf-8').read()
-    return ArticleParser(date).parse(page)
+    with open(path, encoding='utf-8') as file:
+        page = file.read()
+    return ArticleParser(load_date).parse(page)
 
 
 def clean_list(ids_list, texts, post_to_date, force=False):
-    try:
-        for post in ids_list:
-            if post not in post_to_date:
-                log.debug("Can't parse post {}. File doesn't exist.".format(post))
-                continue
-            if not force and post in texts:
-                log.debug("Skip post {}. It's already processed.".format(post))
-                continue
-            data = parse_html(post, post_to_date[post])
-            log.debug('Parse post {}.'.format(post))
-            path = '{}.txt'.format(TEXT_DIR + str(post))
-            # two break-lines for more readable
-            open(path, 'w').write('\n\n'.join((data.date.isoformat(sep=' '), ' '.join(data.keywords),
-                                              data.title, data.article_text)))
-            log.debug('Store {} to {}... {} KB'.format(post, path,
-                                                       round(os.path.getsize(path) // KB_SIZE)))
-            texts.add(post)
-    except KeyboardInterrupt:
-        log.debug("KeyboardInterrupt.")
-    except Exception as exc:
-        exception, value, traceback = sys.exc_info()
-        log.critical('{}'.format(value))  # it doesn't work without formatting
-    finally:
-        open(TEXTS_INDEX, 'w').write('\n'.join(map(str, texts)))
+    for post in ids_list:
+        if post not in post_to_date:
+            log.debug("Can't parse post {}. File doesn't exist.".format(post))
+            continue
+        if not force and post in texts:
+            log.debug("Skip post {}. It's already processed.".format(post))
+            continue
+        data = parse_html(post, post_to_date[post])
+        log.debug('Parse post {}.'.format(post))
+        path = TEXT_DIR + str(post) + '.txt'
+        to_write = [data.date.isoformat(sep=' '), ' '.join(data.keywords),
+                    data.title, data.article_text]
+        with open(path, 'w') as file:
+            file.write('\n\n'.join(to_write))  # two break-lines for more readable
+        log.debug('Store {} to {}... {} KB'.format(post, path,
+                                                   round(os.path.getsize(path) // KB_SIZE)))
+        texts.add(post)
+
+
+def get_cleaned_posts():
+    with open(TEXTS_INDEX) as file:
+        return set(map(int, file.readlines()))
+
+
+def write_cleaned_posts(texts):
+    with open(TEXTS_INDEX, 'w') as file:
+        file.write('\n'.join(map(str, texts)))
 
 
 def main():
-    texts = set(map(int, open(TEXTS_INDEX).readlines()))
-    post_to_date = dict()
-    for x in open(HTMLS_INDEX).readlines():
-        post, date = x.split()
-        post_to_date[int(post)] = datetime.strptime(date, DATE_FORMAT)
+    texts = get_cleaned_posts()
+    post_to_date = load_dates(HTMLS_INDEX)
     if not post_to_date:
         return
 
@@ -260,15 +266,26 @@ def main():
 
     log.config(log.level(args.log_level))
 
-    if args.clean_mode == 'list':
-        ids = list(map(int, open(args.clean_file).readlines()))
-    elif args.clean_mode == 'all':
-        ids = post_to_date.keys()
-    elif args.clean_mode == 'range':
-        ids = [x for x in range(args.start_clean, args.end_clean + 1)]
+    try:
+        if args.clean_mode == 'list':
+            with open(args.clean_file) as file:
+                ids = list(map(int, file.readlines()))
+        elif args.clean_mode == 'all':
+            ids = post_to_date.keys()
+            if not args.clean_force:
+                ids &= texts
+        elif args.clean_mode == 'range':
+            ids = (x for x in range(args.start_clean, args.end_clean + 1))
 
-    clean_list(ids, texts, post_to_date, args.clean_force)
+        clean_list(ids, texts, post_to_date, args.clean_force)
 
+    except KeyboardInterrupt:
+        log.debug("KeyboardInterrupt.")
+    except Exception as exc:
+        exception, value, traceback = sys.exc_info()
+        log.critical(value)
+    finally:
+        write_cleaned_posts(texts)
 
 if __name__ == '__main__':
     main()

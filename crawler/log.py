@@ -8,7 +8,10 @@ import logging
 
 def report_wrap(report):
     def wrap(message, *args, **kargs):
-        report(message.format(*args, **kargs))
+        if message is str:
+             report(message.format(*args, **kargs))
+        else:
+            report(repr(message))
     return wrap
 
 
