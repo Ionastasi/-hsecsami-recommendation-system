@@ -108,7 +108,7 @@ class ArticleParser(HTMLParser):
             self._title = data.strip()
 
         if self._in_text:
-            self._article_text.write(data.strip())
+            self._article_text.write(data.strip() + ' ')
 
         if self._in_poll_title:
             self._article_text.write('\n' + data.strip())

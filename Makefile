@@ -1,5 +1,3 @@
-NAME = crawler/crawler.py
-
 all: prepare
 
 prepare:
@@ -7,5 +5,5 @@ prepare:
 	mkdir -p data/text
 
 clean:
-	rm -rf crawler/__pycache__
+	rm -rf source/__pycache__
 	rm -rf data
