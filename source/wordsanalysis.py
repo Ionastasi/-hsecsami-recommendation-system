@@ -8,6 +8,7 @@ import log
 from collections import defaultdict
 import math
 
+from utils import *
 
 FEATURES_DIR = '../data/features/'
 TEXT_DIR = '../data/text/'
@@ -16,9 +17,13 @@ CYRILLIC_REG = u"[\u0400-\u0500]+"
 ENG_REG = u"[a-z]+"
 
 
-def get_articles_id():
-    with open(TEXTS_INDEX) as file:
-        return list(map(int, file.readlines()))  # set, actually
+def write_idf(idf):
+    path = FEATURES_DIR + "all_features.txt"
+    idf = [[k, v] for v, k in idf.items()]
+    idf.sort()
+    with open(path, 'w') as file:
+        for weight, word in idf:
+            file.write('{} {}\n'.format(word, weight))
 
 
 def article_analysis(filename, morph):
@@ -39,7 +44,7 @@ def all_articles_analysis(morph):
     tf = dict()
     idf = defaultdict(int)
     articles = get_articles_id()
-    for article_id in articles[:10]:
+    for article_id in articles:
         path = TEXT_DIR + str(article_id) + '.txt'
         result = article_analysis(path, morph)
         tf[article_id] = result
@@ -53,17 +58,15 @@ def all_articles_analysis(morph):
 
 def calculate_features(tf, idf):  # _and_write_ ?
     articles = get_articles_id()
-    for article_id in articles[:10]:
+    for article_id in articles:
         print('Featuring {}'.format(article_id))
         path = FEATURES_DIR + str(article_id) + '.txt'
         with open(path, 'w') as file:
             for word in tf[article_id].keys():
                 weight = tf[article_id][word] * idf[word]
                 file.write('{} {}\n'.format(word, weight))
-    path = FEATURES_DIR + "all_features.txt"
-    with open(path, 'w') as file:
-        for word in idf.keys():
-            file.write('{} {}\n'.format(word, idf[word]))
+    write_idf(idf)
+
 
 def main():
     morph = pymorphy2.MorphAnalyzer()
