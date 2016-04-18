@@ -78,7 +78,7 @@ def f_score(y_test, y_pred):
 def get_feature_vector(article_id, idf):
     tf = get_tf(article_id)
     vector = list()
-    for word in list(idf.keys())[20000:30000]:
+    for word in list(idf.keys())[10000:30000]:
         if word in tf:
             vector.append(tf[word])
         else:
@@ -87,34 +87,44 @@ def get_feature_vector(article_id, idf):
 
 
 def learning():
+    step_num = 5
     idf = get_idf()
-    articles = list(get_articles_id())
-    ids_col = len(articles)
-    train_ids = articles[:ids_col * 4 // 5]
-    test_ids = articles[ids_col * 4 // 5 + 1:]
     marks = get_marks()
-    train_marks, test_marks, train_vectors, test_vectors = list(), list(), list(), list()
-    for article_id in articles:
-        print('append ', article_id)
-        if article_id in train_ids:
-            train_marks.append(marks[article_id])
-            train_vectors.append(get_feature_vector(article_id, idf))
-        else:
-            test_marks.append(marks[article_id])
-            test_vectors.append(get_feature_vector(article_id, idf))
+    marked_articles = list(marks.keys())
+    pieces = list()
+    piece_size = len(marked_articles) // step_num
+    for i in range(step_num):
+        pieces.append(set(marked_articles[piece_size * i:piece_size * (i + 1)]))
+    marked_articles = marks.keys()
+    total_f_score = 0
+    for step in range(step_num):
+        print('\nstep', step)
+        train_ids = marked_articles - pieces[step]
+        test_ids = pieces[step]
+        train_marks, test_marks, train_vectors, test_vectors = list(), list(), list(), list()
+        print('appending')
+        for article_id in marked_articles:
+            if article_id in train_ids:
+                train_marks.append(marks[article_id])
+                train_vectors.append(get_feature_vector(article_id, idf))
+            else:
+                test_marks.append(marks[article_id])
+                test_vectors.append(get_feature_vector(article_id, idf))
 
-    print('learning')
-    classifier = lm.LinearRegression()
-    classifier.fit(train_vectors, train_marks)
-    print('predicting')
-    pred_marks = classifier.predict(test_vectors)
-    for i in range(len(pred_marks)):
-        if pred_marks[i] >= 0:
-            pred_marks[i] = 1
-        else:
-            pred_marks[i] = -1
-
-    print('F-score = {f}'.format(f = f_score(test_marks, pred_marks)))
+        print('learning')
+        classifier = lm.LinearRegression()
+        classifier.fit(train_vectors, train_marks)
+        pred_marks = classifier.predict(test_vectors)
+        for i in range(len(pred_marks)):
+            if pred_marks[i] >= 0:
+                pred_marks[i] = 1
+            else:
+                pred_marks[i] = -1
+        f = f_score(test_marks, pred_marks)
+        total_f_score += f
+        print('F-score = {}'.format(f))
+    total_f_score /= 5
+    print('Total F-score = {}'.format(total_f_score))
 
 
 def main():
