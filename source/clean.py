@@ -48,7 +48,7 @@ class ArticleParser(HTMLParser):
         self._article_text = StringIO()
         self._keywords = list()
         self._title = str()
-        self._date_published = str()
+        self._date_published = date.today()
 
 
     def handle_starttag(self, tag, attrs):
