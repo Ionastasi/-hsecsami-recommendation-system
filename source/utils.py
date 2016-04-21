@@ -1,7 +1,6 @@
 from datetime import datetime
 from config import *
 
-
 def load_dates(path):
     post_to_date = dict()
     with open(path) as lines:
