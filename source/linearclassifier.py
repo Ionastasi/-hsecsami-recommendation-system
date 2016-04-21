@@ -3,6 +3,7 @@
 # ionastasi@gmail.com
 
 from sklearn import linear_model as lm
+from math import log2
 
 from utils import *
 
@@ -11,21 +12,36 @@ FEATURES_DIR = '../data/features/'
 
 def get_idf():
     idf = dict()
+    col = len(get_articles_id())  # here must be index-file
     path = FEATURES_DIR + 'all_features.txt'
     with open(path, encoding='utf-8') as file:
         for line in file.readlines():
             word, weight = line.split()
-            idf[word] = float(weight)
+            if weight == '1':
+                idf[word] = 0
+            else:
+                idf[word] = log2(col / int(weight))
     return idf
 
+def get_sorted_idf():
+    sorted_idf = list()
+    col = len(get_articles_id())
+    path = FEATURES_DIR + 'all_features.txt'
+    with open(path, encoding='utf-8') as file:
+        for line in file.readlines():
+            word, weight = line.split()
+            sorted_idf.append([int(col), word])
+    sorted_idf.sort()  # actually it's already sorted, but may be...
+    return sorted_idf
 
-def get_tf(article_id):
+
+def get_tf(article_id, idf):
     tf = dict()
     path = FEATURES_DIR + str(article_id) + '.txt'
     with open(path, encoding='utf-8') as file:
         for line in file.readlines():
             word, weight = line.split()
-            tf[word] = float(weight)
+            tf[word] = int(weight) * idf[word]
     return tf
 
 
@@ -75,10 +91,11 @@ def f_score(y_test, y_pred):
     return 2 * p * r / (p + r)
 
 
-def get_feature_vector(article_id, idf):
-    tf = get_tf(article_id)
+def get_feature_vector(article_id, idf, sorted_idf):
+    tf = get_tf(article_id, idf)
+    words_num = len(sorted_idf)
     vector = list()
-    for word in list(idf.keys())[10000:30000]:
+    for weight, word in sorted_idf[words_num // 2:]:
         if word in tf:
             vector.append(tf[word])
         else:
@@ -89,6 +106,7 @@ def get_feature_vector(article_id, idf):
 def learning():
     step_num = 5
     idf = get_idf()
+    sorted_idf = get_sorted_idf()
     marks = get_marks()
     marked_articles = list(marks.keys())
     pieces = list()
@@ -98,7 +116,7 @@ def learning():
     marked_articles = marks.keys()
     total_f_score = 0
     for step in range(step_num):
-        print('\nstep', step)
+        print('\nstep', step + 1)
         train_ids = marked_articles - pieces[step]
         test_ids = pieces[step]
         train_marks, test_marks, train_vectors, test_vectors = list(), list(), list(), list()
@@ -106,13 +124,13 @@ def learning():
         for article_id in marked_articles:
             if article_id in train_ids:
                 train_marks.append(marks[article_id])
-                train_vectors.append(get_feature_vector(article_id, idf))
+                train_vectors.append(get_feature_vector(article_id, idf, sorted_idf))
             else:
                 test_marks.append(marks[article_id])
-                test_vectors.append(get_feature_vector(article_id, idf))
+                test_vectors.append(get_feature_vector(article_id, idf, sorted_idf))
 
         print('learning')
-        classifier = lm.LinearRegression()
+        classifier = lm.SGDClassifier(los=log, penalty=l2)
         classifier.fit(train_vectors, train_marks)
         pred_marks = classifier.predict(test_vectors)
         for i in range(len(pred_marks)):
@@ -124,7 +142,7 @@ def learning():
         total_f_score += f
         print('F-score = {}'.format(f))
     total_f_score /= 5
-    print('Total F-score = {}'.format(total_f_score))
+    print('\nTotal F-score = {}'.format(total_f_score))
 
 
 def main():
