@@ -39,7 +39,7 @@ class ParserPageAll(HTMLParser):
 
 def get_links():
     links = list()
-    for page_n in range(1, 10):
+    for page_n in range(1, 101):
         url = LINK_PREFIX_ALL_PAGE + str(page_n)
         text = download(url)
         links += ParserPageAll().parse(text)
@@ -121,19 +121,22 @@ def download(url, notfound_error=True):
 def download_post(url, notfound_error=True):
     text = download(url, notfound_error)
     if not text:
-        return
+        return False
     id_page = url.replace(LINK_PREFIX_POST, '')
     path = path = HTML_DIR + id_page + '.html'
     with open(path, 'w') as file:
         file.write(text)
     log.debug('Store {} to {}... {} KB'.format(url, path, round(os.path.getsize(path) // KB_SIZE)))
+    return True
 
 
 def download_list(ids_list, post_to_date,
                   print_ids=False, force=False, notfound_error=True):
     for post_id in ids_list:
         if force or post_id not in post_to_date:
-            download_post(LINK_PREFIX_POST + str(post_id), notfound_error)
+            was_downloaded = download_post(LINK_PREFIX_POST + str(post_id), notfound_error)
+            if not was_downloaded:  # so it doesn't exist
+                continue
             post_to_date[post_id] = datetime.today()
             if print_ids:
                 print(post_id)
@@ -148,26 +151,26 @@ def store_index(post_to_date):
 
 
 def main():
-    post_to_date = load_dates(HTMLS_INDEX)
-
-    args = parse_argument()
-    if not args:
-        return
-
-    log.config(log.level(args.log_level))
-
     try:
+        post_to_date = load_dates(HTMLS_INDEX)
+
+        args = parse_argument()
+        if not args:
+            return
+
+        log.config(log.level(args.log_level))
+
         if args.update_mode == 'last':
             notfound_error = True
             ids = get_links()
         elif args.update_mode == 'range':
             notfound_error = False
-            ids = (x for x in range(args.start_down, args.end_down + 1))
+            ids = range(args.start_down, args.end_down + 1)
         download_list(ids, post_to_date, args.print_ids,
                       args.update_force, notfound_error)
 
     except KeyboardInterrupt:
-        log.debug("KeyboardInterrupt.")
+        log.debug("Aborted by KeyboardInterrupt.")
     except Exception as exc:
         exception, value, traceback = sys.exc_info()
         log.critical(value)

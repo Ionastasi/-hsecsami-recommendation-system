@@ -224,12 +224,12 @@ def parse_html(post, load_date):
     return ArticleParser(load_date).parse(page)
 
 
-def clean_list(ids_list, texts, post_to_date, force=False):
+def clean_list(ids_list, cleaned_posts_ids, post_to_date, force=False):
     for post in ids_list:
         if post not in post_to_date:
             log.debug("Can't parse post {}. File doesn't exist.".format(post))
             continue
-        if not force and post in texts:
+        if not force and post in cleaned_posts_ids:
             log.debug("Skip post {}. It's already processed.".format(post))
             continue
         data = parse_html(post, post_to_date[post])
@@ -241,7 +241,7 @@ def clean_list(ids_list, texts, post_to_date, force=False):
             file.write('\n\n'.join(to_write))  # two break-lines for more readable
         log.debug('Store {} to {}... {} KB'.format(post, path,
                                                    round(os.path.getsize(path) // KB_SIZE)))
-        texts.add(post)
+        cleaned_posts_ids.add(post)
 
 
 def get_cleaned_posts():
@@ -249,13 +249,13 @@ def get_cleaned_posts():
         return set(map(int, file.readlines()))
 
 
-def write_cleaned_posts(texts):
+def store_index(cleaned_posts_ids):
     with open(TEXTS_INDEX, 'w') as file:
-        file.write('\n'.join(map(str, texts)))
+        file.write('\n'.join(map(str, cleaned_posts_ids)))
 
 
 def main():
-    texts = get_cleaned_posts()
+    cleaned_posts_ids = get_cleaned_posts()
     post_to_date = load_dates(HTMLS_INDEX)
     if not post_to_date:
         return
@@ -273,11 +273,10 @@ def main():
         elif args.clean_mode == 'all':
             ids = post_to_date.keys()
             if not args.clean_force:
-                ids &= texts
+                ids -= cleaned_posts_ids
         elif args.clean_mode == 'range':
             ids = (x for x in range(args.start_clean, args.end_clean + 1))
-
-        clean_list(ids, texts, post_to_date, args.clean_force)
+        clean_list(ids, cleaned_posts_ids, post_to_date, args.clean_force)
 
     except KeyboardInterrupt:
         log.debug("KeyboardInterrupt.")
@@ -285,7 +284,7 @@ def main():
         exception, value, traceback = sys.exc_info()
         log.critical(value)
     finally:
-        write_cleaned_posts(texts)
+        store_index(cleaned_posts_ids)
 
 if __name__ == '__main__':
     main()
