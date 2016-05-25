@@ -47,8 +47,7 @@ def get_marked():
             result.add(post_id)
     return result
 
-
-def main():
+def normalizing():
     morph = pymorphy2.MorphAnalyzer()
     cleaned = load_cleaned()
     marked = get_marked()
@@ -59,4 +58,4 @@ def main():
     store_index(normalized)
 
 if __name__ == '__main__':
-    main()
+    normalizing()
