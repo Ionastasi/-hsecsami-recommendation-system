@@ -14,12 +14,7 @@ from utils import *
 REG = r'[\u0400-\u0500a-z\d-]{2,}'
 RUS_REG = r'[\u0400-\u0500a-z\d-]{4,}'
 ENG_REG = r'[a-z\d-]{2,}'
-BAD_REG = r'^[\d-]+$'
-
-
-def get_normalized():
-    with open(NORMALIZED_INDEX) as file:
-        return set(map(int, file.readlines()))
+BAD_REG = r'([\d-]+|.*-)'
 
 
 def store_index(normalized):
@@ -44,17 +39,23 @@ def make_normalized_file(post_id, morph):
     print("Post {} normalized".format(post_id))
 
 
+def get_marked():
+    result = set()
+    with open(MARKS_FILE) as lines:
+        for line in lines:
+            post_id, mark = map(int, line.split())
+            result.add(post_id)
+    return result
+
+
 def main():
     morph = pymorphy2.MorphAnalyzer()
     cleaned = load_cleaned()
+    marked = get_marked()
     normalized = get_normalized()
-    count = 0
-    for post_id in cleaned:
+    for post_id in (cleaned & marked - normalized):
         make_normalized_file(post_id, morph)
         normalized.add(post_id)
-        count += 1
-        if (count == 100):
-            break
     store_index(normalized)
 
 if __name__ == '__main__':

@@ -13,3 +13,8 @@ def load_dates(path):
 def load_cleaned():
     with open(TEXTS_INDEX) as file:
         return set(map(int, file.readlines()))
+
+
+def get_normalized():
+    with open(NORMALIZED_INDEX) as file:
+        return set(map(int, file.readlines()))
