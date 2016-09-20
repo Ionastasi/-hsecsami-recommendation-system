@@ -1,2 +1,2 @@
 # hsecsami-recommendation-system
-1 курс, проект "Рекомендательная система"
+A simply recommendation system for <link>geektimes.ru</link>.
